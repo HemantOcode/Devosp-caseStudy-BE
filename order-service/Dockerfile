@@ -23,6 +23,6 @@ USER spring:spring
 
 COPY --from=build /app/order-service/target/*.jar app.jar
 
-#Listining on 8082
+# Listining on 8082
 EXPOSE 8082
 ENTRYPOINT ["java", "-jar", "app.jar"]
