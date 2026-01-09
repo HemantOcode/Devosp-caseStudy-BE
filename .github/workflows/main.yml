@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,16 +52,13 @@ jobs:
     needs: detect
     if: ${{ needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != '' }}
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
         service: ${{ fromJson(needs.detect.outputs.matrix) }}
-
     permissions:
       contents: read
       id-token: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -73,18 +69,27 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Public ECR
+        env:
+          AWS_REGION: us-east-1
+        run: |
+          aws ecr-public get-login-password --region $AWS_REGION \
+            | docker login --username AWS --password-stdin public.ecr.aws
 
       - name: Build & Push Docker Image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
+          # Map matrix service to public repo
+          case "${{ matrix.service }}" in
+            "api-gateway") REPO="public.ecr.aws/j3y2f7u7/api-gateway" ;;
+            "order-service") REPO="public.ecr.aws/j3y2f7u7/order-service" ;;
+            "user-service") REPO="public.ecr.aws/j3y2f7u7/user-service" ;;
+            *) echo "Unknown service"; exit 1 ;;
+          esac
+
           docker build \
             -f ./${{ matrix.service }}/Dockerfile \
-            -t $ECR_REGISTRY/${{ matrix.service }}:latest \
-            -t $ECR_REGISTRY/${{ matrix.service }}:${{ github.sha }} \
+            -t $REPO:latest \
+            -t $REPO:${{ github.sha }} \
             .
 
-          docker push $ECR_REGISTRY/${{ matrix.service }} --all-tags
+          docker push $REPO --all-tags
