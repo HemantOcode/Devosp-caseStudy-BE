@@ -1,30 +1,26 @@
-# Stage 1: Build
-FROM maven:3.9-eclipse-temurin-17 AS build
-WORKDIR /app
+# ---------- Build Stage ----------
+FROM maven:3.9.6-eclipse-temurin-17 AS build
+WORKDIR /build
 
-COPY common/pom.xml ./common/
-COPY user-service/pom.xml ./user-service/
+COPY common/pom.xml common/pom.xml
+COPY user-service/pom.xml user-service/pom.xml
 
-RUN mvn -f common/pom.xml dependency:go-offline -B
-RUN mvn -f user-service/pom.xml dependency:go-offline -B
+RUN mvn -B -q -f user-service/pom.xml dependency:go-offline
 
-COPY common/src ./common/src
-RUN mvn -f common/pom.xml clean install -DskipTests -B
+COPY common/src common/src
+COPY user-service/src user-service/src
 
-COPY user-service/src ./user-service/src
-RUN mvn -f user-service/pom.xml clean package -DskipTests -B
+RUN mvn -B -q -f common/pom.xml clean install -DskipTests
+RUN mvn -B -q -f user-service/pom.xml clean package -DskipTests
 
-# Stage 2: Runtime
+# ---------- Runtime Stage ----------
 FROM eclipse-temurin:17-jre-alpine
+RUN addgroup -S app && adduser -S app -G app
+USER app
 WORKDIR /app
 
-RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
-
-COPY --from=build /app/user-service/target/*.jar app.jar
-
-# Listining on 8081
+COPY --from=build /build/user-service/target/*.jar app.jar
 
 EXPOSE 8081
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java","-XX:+UseContainerSupport","-XX:MaxRAMPercentage=75.0","-jar","app.jar"]
