@@ -26,4 +26,5 @@ COPY --from=build /app/user-service/target/*.jar app.jar
 # Listining on 8081
 
 EXPOSE 8081
+
 ENTRYPOINT ["java", "-jar", "app.jar"]
