@@ -1,0 +1,46 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: http://user-service:8081
+          predicates:
+            - Path=/users/**
+          filters:
+            - RewritePath=/users/(?<segment>.*), /users/$\{segment}
+
+        - id: order-service
+          uri: http://order-service:8082
+          predicates:
+            - Path=/orders/**
+          filters:
+            - RewritePath=/orders/(?<segment>.*), /orders/$\{segment}
+
+      globalcors:
+        corsConfigurations:
+          "[/**]":
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty: DEBUG
