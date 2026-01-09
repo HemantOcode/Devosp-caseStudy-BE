@@ -18,5 +18,6 @@ USER spring:spring
 COPY --from=build /app/api-gateway/target/*.jar app.jar
 
 # Listining on 8080
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
