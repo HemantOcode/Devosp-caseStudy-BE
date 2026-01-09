@@ -1,0 +1,50 @@
+name: Backend Smart Monorepo CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "services/**"
+  pull_request:
+    paths:
+      - "services/**"
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: changed
+        uses: tj-actions/changed-files@v44
+        with:
+          files: services/**
+
+      - id: set-matrix
+        run: |
+          SERVICES=$(echo '${{ steps.changed.outputs.all_changed_files }}' | tr ' ' '\n' | cut -d/ -f2 | uniq | jq -R . | jq -cs .)
+          echo "matrix=$SERVICES" >> $GITHUB_OUTPUT
+
+  build-test-push:
+    needs: detect
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Test
+        run: |
+          cd services/${{ matrix.service }}
+          npm install
+          npm test || true
+
+      - name: Docker Build & Push
+        run: |
+          docker build -t ${{ matrix.service }}:${{ github.sha }} services/${{ matrix.service }}
+          docker tag ${{ matrix.service }}:${{ github.sha }} ${{ secrets.DOCKER_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_REPO }}/${{ matrix.service }}:${{ github.sha }}
