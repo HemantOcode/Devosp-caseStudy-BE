@@ -4,7 +4,6 @@ WORKDIR /app
 
 # 1. Copy the ROOT pom first
 COPY pom.xml .
-COPY ${{ matrix.service }}/ /app/${{ matrix.service }}/
 
 # 2. Copy and install common
 COPY common/pom.xml common/
