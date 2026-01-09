@@ -22,22 +22,31 @@ jobs:
       - id: changed
         uses: tj-actions/changed-files@v44
         with:
-          dir_names: true
-          dir_names_max_depth: 1
+          files_yaml: |
+            services:
+              - user-service/**
+              - order-service/**
+              - api-gateway/**
+            common:
+              - common/**
 
       - id: set-matrix
         run: |
-          # Detect changed services, ensuring we only include folders containing 'service' or 'gateway'
-          SERVICES=$(echo '${{ steps.changed.outputs.all_changed_files }}' | tr ' ' '\n' | grep -E 'service|gateway' | jq -R . | jq -cs .)
+          # If 'common' changes, build everything. Otherwise, build only changed services.
+          if [ "${{ steps.changed.outputs.common_any_changed }}" == "true" ]; then
+            echo "Common changed. Triggering all services."
+            SERVICES='["user-service", "order-service", "api-gateway"]'
+          else
+            # Extract folder names, filter for services, and format as JSON array
+            SERVICES=$(echo '${{ steps.changed.outputs.services_all_changed_files }}' | tr ' ' '\n' | cut -d/ -f1 | sort -u | grep -E 'service|gateway' | jq -R . | jq -cs .)
+          fi
+          
           echo "matrix=$SERVICES" >> $GITHUB_OUTPUT
 
   build-test-push:
     needs: detect
     if: ${{ needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != '' }}
     runs-on: ubuntu-latest
-    
-    # Required for the AWS Credentials action to interact with GitHub OIDC if using that, 
-    # otherwise standard secrets work.
     permissions:
       contents: read
       id-token: write
@@ -49,25 +58,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Configure AWS Credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1 # Change to your region
+          aws-region: us-east-1
 
-      # 2. Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 3. Docker Build & Push to ECR
       - name: Docker Build & Push
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # Note: The repository name in ECR must already exist (e.g., 'user-service')
+          # THE FIX: 
+          # 1. '-f ./${{ matrix.service }}/Dockerfile' tells Docker where the file is.
+          # 2. The '.' at the end tells Docker the context is the ROOT (where pom.xml lives).
           docker build -t $ECR_REGISTRY/${{ matrix.service }}:latest \
                        -t $ECR_REGISTRY/${{ matrix.service }}:${{ github.sha }} \
                        -f ./${{ matrix.service }}/Dockerfile .
