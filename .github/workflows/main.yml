@@ -1,13 +1,13 @@
-name: Backend Smart Monorepo CI
+name: Backend Monorepo CI
 
 on:
   push:
     branches: [ main ]
     paths:
-      - "services/**"
-  pull_request:
-    paths:
-      - "services/**"
+      - "user-service/**"
+      - "order-service/**"
+      - "api-gateway/**"
+      - "common/**"
 
 jobs:
   detect:
@@ -16,20 +16,32 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
 
       - id: changed
         uses: tj-actions/changed-files@v44
         with:
-          files: services/**
+          dir_names: true
+          dir_names_max_depth: 1
 
       - id: set-matrix
         run: |
-          SERVICES=$(echo '${{ steps.changed.outputs.all_changed_files }}' | tr ' ' '\n' | cut -d/ -f2 | uniq | jq -R . | jq -cs .)
+          # Detect changed services, ensuring we only include folders containing 'service' or 'gateway'
+          SERVICES=$(echo '${{ steps.changed.outputs.all_changed_files }}' | tr ' ' '\n' | grep -E 'service|gateway' | jq -R . | jq -cs .)
           echo "matrix=$SERVICES" >> $GITHUB_OUTPUT
 
   build-test-push:
     needs: detect
+    if: ${{ needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != '' }}
     runs-on: ubuntu-latest
+    
+    # Required for the AWS Credentials action to interact with GitHub OIDC if using that, 
+    # otherwise standard secrets work.
+    permissions:
+      contents: read
+      id-token: write
+
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect.outputs.matrix) }}
@@ -37,14 +49,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build & Test
-        run: |
-          cd services/${{ matrix.service }}
-          npm install
-          npm test || true
+      # 1. Configure AWS Credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1 # Change to your region
 
+      # 2. Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 3. Docker Build & Push to ECR
       - name: Docker Build & Push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker build -t ${{ matrix.service }}:${{ github.sha }} services/${{ matrix.service }}
-          docker tag ${{ matrix.service }}:${{ github.sha }} ${{ secrets.DOCKER_REPO }}/${{ matrix.service }}:${{ github.sha }}
-          docker push ${{ secrets.DOCKER_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          # Note: The repository name in ECR must already exist (e.g., 'user-service')
+          docker build -t $ECR_REGISTRY/${{ matrix.service }}:latest \
+                       -t $ECR_REGISTRY/${{ matrix.service }}:${{ github.sha }} \
+                       -f ./${{ matrix.service }}/Dockerfile .
+          
+          docker push $ECR_REGISTRY/${{ matrix.service }} --all-tags
