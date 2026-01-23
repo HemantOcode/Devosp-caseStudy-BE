@@ -80,9 +80,9 @@ jobs:
         run: |
           # Map matrix service to public repo
           case "${{ matrix.service }}" in
-            "api-gateway") REPO="public.ecr.aws/j3y2f7u7/api-gateway" ;;
-            "order-service") REPO="public.ecr.aws/j3y2f7u7/order-service" ;;
-            "user-service") REPO="public.ecr.aws/j3y2f7u7/user-service" ;;
+            "api-gateway") REPO="public.ecr.aws/l4d8u4j9/lg-ns/api-gateway" ;;
+            "order-service") REPO="public.ecr.aws/l4d8u4j9/lg-ns/orders-service" ;;
+            "user-service") REPO="public.ecr.aws/l4d8u4j9/lg-ns/users-services" ;;
             *) echo "Unknown service"; exit 1 ;;
           esac
 
