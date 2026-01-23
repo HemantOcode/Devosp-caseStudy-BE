@@ -8,6 +8,8 @@ on:
       - "order-service/**"
       - "api-gateway/**"
       - "common/**"
+  # This enables manual triggering from the "Actions" tab
+  workflow_dispatch:
 
 jobs:
   detect:
@@ -20,6 +22,8 @@ jobs:
           fetch-depth: 0
 
       - id: changed
+        # We only run this step if it's NOT a manual trigger
+        if: github.event_name != 'workflow_dispatch'
         uses: tj-actions/changed-files@v44
         with:
           files_yaml: |
@@ -34,9 +38,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          if [[ "${{ steps.changed.outputs.common_any_changed }}" == "true" ]]; then
+          
+          # 1. Check if manual run
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Manual run detected: Building all services."
             SERVICES='["user-service","order-service","api-gateway"]'
+          
+          # 2. Check if 'common' library changed
+          elif [[ "${{ steps.changed.outputs.common_any_changed }}" == "true" ]]; then
+            echo "Common library changed: Building all services."
+            SERVICES='["user-service","order-service","api-gateway"]'
+          
+          # 3. Otherwise, build only changed services
           else
             SERVICES=$(echo '${{ steps.changed.outputs.services_all_changed_files }}' \
               | tr ' ' '\n' \
