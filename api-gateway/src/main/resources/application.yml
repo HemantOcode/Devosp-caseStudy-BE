@@ -7,11 +7,11 @@ spring:
 
   cloud:
     gateway:
-      # global-filters level
+      # 1. REMOVE DUPLICATES: Downstream services often add their own CORS headers.
+      # This ensures the browser only sees the Gateway's headers.
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
       
-      # routes level
       routes:
         - id: user-service
           uri: http://users.lg-ns:8081
@@ -27,12 +27,12 @@ spring:
           filters:
             - RewritePath=/orders/(?<segment>.*), /orders/$\{segment}
 
-      # globalcors level (parallel to routes)
+      # 2. CORS CONFIG: Must use patterns if allowCredentials is true
       globalcors:
         add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
+            allowedOriginPatterns: "*" # Use patterns instead of allowedOrigins for '*'
             allowedMethods:
               - GET
               - POST
@@ -40,7 +40,8 @@ spring:
               - DELETE
               - OPTIONS
             allowedHeaders: "*"
-            allowCredentials: true
+            allowCredentials: true # Required for sessions/cookies
+            maxAge: 3600
 
 management:
   endpoints:
